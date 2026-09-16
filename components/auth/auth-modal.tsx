@@ -6,7 +6,7 @@ import { registerRealUser, loginRealUser } from '@/lib/supabase/auth';
 import { uploadAlertPhoto } from '@/lib/supabase/storage';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { X, Lock, Mail, User, Camera, ShieldCheck, Sparkles, LogIn, UserPlus } from 'lucide-react';
+import { X, Lock, User, Camera, ShieldCheck, Sparkles, LogIn, UserPlus } from 'lucide-react';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -18,10 +18,9 @@ export function AuthModal({ isOpen, onClose, initialMode = 'login' }: AuthModalP
   const { setCurrentUser } = useApp();
 
   const [mode, setMode] = useState<'login' | 'register'>(initialMode);
-  const [email, setEmail] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
   const [firstName, setFirstName] = useState<string>('');
   const [lastName, setLastName] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
   const [city, setCity] = useState<string>('Lausanne');
   const [isHelper, setIsHelper] = useState<boolean>(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -54,16 +53,15 @@ export function AuthModal({ isOpen, onClose, initialMode = 'login' }: AuthModalP
     setIsLoading(true);
 
     try {
-      if (mode === 'register') {
-        if (!firstName.trim() || !lastName.trim() || !email.trim() || !password.trim()) {
-          throw new Error('Veuillez remplir tous les champs obligatoires.');
-        }
+      if (!firstName.trim() || !lastName.trim() || !password.trim()) {
+        throw new Error('Veuillez entrer votre prénom, nom et mot de passe.');
+      }
 
+      if (mode === 'register') {
         const newProfile = await registerRealUser({
-          email: email.trim(),
-          password: password.trim(),
           first_name: firstName.trim(),
           last_name: lastName.trim(),
+          password: password.trim(),
           city: city.trim(),
           is_helper: isHelper,
           avatar_url: avatarUrl,
@@ -72,11 +70,11 @@ export function AuthModal({ isOpen, onClose, initialMode = 'login' }: AuthModalP
         setCurrentUser(newProfile);
         onClose();
       } else {
-        if (!email.trim() || !password.trim()) {
-          throw new Error('Veuillez entrer votre email et mot de passe.');
-        }
-
-        const loggedInProfile = await loginRealUser(email.trim(), password.trim());
+        const loggedInProfile = await loginRealUser(
+          firstName.trim(),
+          lastName.trim(),
+          password.trim()
+        );
         setCurrentUser(loggedInProfile);
         onClose();
       }
@@ -145,69 +143,96 @@ export function AuthModal({ isOpen, onClose, initialMode = 'login' }: AuthModalP
 
         <form onSubmit={handleSubmit} className="space-y-4">
 
+          {/* REGISTER PHOTO FIELD */}
+          {mode === 'register' && (
+            <div className="text-center">
+              <input 
+                type="file" 
+                accept="image/*" 
+                ref={fileInputRef}
+                onChange={handleAvatarFileChange} 
+                className="hidden" 
+              />
+              
+              <div className="relative inline-block mb-2">
+                <img
+                  src={avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(firstName || 'user')}`}
+                  alt="Photo de profil"
+                  className="w-20 h-20 rounded-full object-cover border-3 border-nature-600 shadow mx-auto bg-cream-100"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="absolute bottom-0 right-0 p-2 bg-nature-600 text-white rounded-full shadow hover:bg-nature-700 transition-transform hover:scale-110"
+                >
+                  <Camera className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-[11px] text-warmgray-500 font-semibold">
+                {isUploadingPhoto ? 'Envoi de la photo...' : 'Photo de profil (facultatif)'}
+              </p>
+            </div>
+          )}
+
+          {/* FIRST NAME & LAST NAME */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-warmgray-700 uppercase tracking-wider mb-1">
+                Prénom *
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  required
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="Ex: Anissa"
+                  className="w-full p-3 pl-9 rounded-xl border border-cream-300 text-xs font-semibold text-warmgray-900 focus:ring-2 focus:ring-nature-500 focus:outline-none"
+                />
+                <User className="w-4 h-4 text-warmgray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-warmgray-700 uppercase tracking-wider mb-1">
+                Nom *
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  required
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="Ex: Dupont"
+                  className="w-full p-3 pl-9 rounded-xl border border-cream-300 text-xs font-semibold text-warmgray-900 focus:ring-2 focus:ring-nature-500 focus:outline-none"
+                />
+                <User className="w-4 h-4 text-warmgray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              </div>
+            </div>
+          </div>
+
+          {/* PASSWORD */}
+          <div>
+            <label className="block text-xs font-bold text-warmgray-700 uppercase tracking-wider mb-1">
+              Mot de passe *
+            </label>
+            <div className="relative">
+              <input
+                type="password"
+                required
+                minLength={4}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Votre mot de passe"
+                className="w-full p-3 pl-9 rounded-xl border border-cream-300 text-xs font-semibold text-warmgray-900 focus:ring-2 focus:ring-nature-500 focus:outline-none"
+              />
+              <Lock className="w-4 h-4 text-warmgray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            </div>
+          </div>
+
           {/* REGISTER EXTRA FIELDS */}
           {mode === 'register' && (
             <>
-              {/* Photo de profil */}
-              <div className="text-center">
-                <input 
-                  type="file" 
-                  accept="image/*" 
-                  ref={fileInputRef}
-                  onChange={handleAvatarFileChange} 
-                  className="hidden" 
-                />
-                
-                <div className="relative inline-block mb-2">
-                  <img
-                    src={avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(firstName || 'user')}`}
-                    alt="Photo de profil"
-                    className="w-20 h-20 rounded-full object-cover border-3 border-nature-600 shadow mx-auto bg-cream-100"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="absolute bottom-0 right-0 p-2 bg-nature-600 text-white rounded-full shadow hover:bg-nature-700 transition-transform hover:scale-110"
-                  >
-                    <Camera className="w-4 h-4" />
-                  </button>
-                </div>
-                <p className="text-[11px] text-warmgray-500 font-semibold">
-                  {isUploadingPhoto ? 'Envoi de la photo...' : 'Photo de profil (facultatif)'}
-                </p>
-              </div>
-
-              {/* Prénom & Nom */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-warmgray-700 uppercase tracking-wider mb-1">
-                    Prénom *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    placeholder="Ex: Anissa"
-                    className="w-full p-3 rounded-xl border border-cream-300 text-xs font-semibold text-warmgray-900 focus:ring-2 focus:ring-nature-500 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-warmgray-700 uppercase tracking-wider mb-1">
-                    Nom *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    placeholder="Ex: Dupont"
-                    className="w-full p-3 rounded-xl border border-cream-300 text-xs font-semibold text-warmgray-900 focus:ring-2 focus:ring-nature-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
               {/* Ville */}
               <div>
                 <label className="block text-xs font-bold text-warmgray-700 uppercase tracking-wider mb-1">
@@ -237,42 +262,6 @@ export function AuthModal({ isOpen, onClose, initialMode = 'login' }: AuthModalP
               </div>
             </>
           )}
-
-          {/* EMAIL & PASSWORD (ALWAYS PRESENT) */}
-          <div>
-            <label className="block text-xs font-bold text-warmgray-700 uppercase tracking-wider mb-1">
-              Adresse Email *
-            </label>
-            <div className="relative">
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="votre.email@domaine.ch"
-                className="w-full p-3 pl-10 rounded-xl border border-cream-300 text-xs font-semibold text-warmgray-900 focus:ring-2 focus:ring-nature-500 focus:outline-none"
-              />
-              <Mail className="w-4 h-4 text-warmgray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-warmgray-700 uppercase tracking-wider mb-1">
-              Mot de passe *
-            </label>
-            <div className="relative">
-              <input
-                type="password"
-                required
-                minLength={6}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full p-3 pl-10 rounded-xl border border-cream-300 text-xs font-semibold text-warmgray-900 focus:ring-2 focus:ring-nature-500 focus:outline-none"
-              />
-              <Lock className="w-4 h-4 text-warmgray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            </div>
-          </div>
 
           <Button 
             variant="primary" 

@@ -2,23 +2,30 @@ import { supabase, isSupabaseConfigured } from './client';
 import { UserProfile } from '@/types';
 
 export interface SignUpInput {
-  email: string;
-  password: string;
   first_name: string;
   last_name: string;
+  password: string;
   city?: string;
   is_helper?: boolean;
   avatar_url?: string | null;
+  email?: string;
+}
+
+function generateInternalEmail(firstName: string, lastName: string): string {
+  const cleanFirst = firstName.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cleanLast = lastName.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  return `${cleanFirst}.${cleanLast || 'user'}@sanspattes.app`;
 }
 
 export async function registerRealUser(input: SignUpInput): Promise<UserProfile> {
   const city = input.city || 'Lausanne';
   const isHelper = input.is_helper || false;
+  const userEmail = input.email || generateInternalEmail(input.first_name, input.last_name);
 
   if (isSupabaseConfigured()) {
     // 1. Supabase Auth Sign Up
     const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: input.email,
+      email: userEmail,
       password: input.password,
       options: {
         data: {
@@ -29,6 +36,10 @@ export async function registerRealUser(input: SignUpInput): Promise<UserProfile>
     });
 
     if (authError) {
+      // If user already exists, attempt login instead
+      if (authError.message.includes('already registered')) {
+        return loginRealUser(input.first_name, input.last_name, input.password);
+      }
       throw new Error(`Erreur d'inscription : ${authError.message}`);
     }
 
@@ -40,7 +51,7 @@ export async function registerRealUser(input: SignUpInput): Promise<UserProfile>
     // 2. Create Profile in public.profiles table
     const newProfile: UserProfile = {
       id: userId,
-      email: input.email,
+      email: userEmail,
       first_name: input.first_name,
       last_name: input.last_name,
       avatar_url: input.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(input.first_name)}`,
@@ -57,7 +68,7 @@ export async function registerRealUser(input: SignUpInput): Promise<UserProfile>
       .from('profiles')
       .upsert({
         id: userId,
-        email: input.email,
+        email: userEmail,
         first_name: input.first_name,
         last_name: input.last_name,
         avatar_url: newProfile.avatar_url,
@@ -84,7 +95,7 @@ export async function registerRealUser(input: SignUpInput): Promise<UserProfile>
     const userId = 'usr_' + Date.now();
     const newProfile: UserProfile = {
       id: userId,
-      email: input.email,
+      email: userEmail,
       first_name: input.first_name,
       last_name: input.last_name,
       avatar_url: input.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(input.first_name)}`,
@@ -99,7 +110,8 @@ export async function registerRealUser(input: SignUpInput): Promise<UserProfile>
 
     if (typeof window !== 'undefined') {
       const storedUsers = JSON.parse(localStorage.getItem('sp_local_users') || '{}');
-      storedUsers[input.email] = { profile: newProfile, password: input.password };
+      const accountKey = `${input.first_name.toLowerCase()}_${input.last_name.toLowerCase()}`;
+      storedUsers[accountKey] = { profile: newProfile, password: input.password };
       localStorage.setItem('sp_local_users', JSON.stringify(storedUsers));
     }
 
@@ -107,15 +119,17 @@ export async function registerRealUser(input: SignUpInput): Promise<UserProfile>
   }
 }
 
-export async function loginRealUser(email: string, password: string): Promise<UserProfile> {
+export async function loginRealUser(firstName: string, lastName: string, password: string): Promise<UserProfile> {
+  const userEmail = generateInternalEmail(firstName, lastName);
+
   if (isSupabaseConfigured()) {
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+      email: userEmail,
+      password: password,
     });
 
     if (authError || !authData.user) {
-      throw new Error(`Erreur de connexion : ${authError?.message || 'Identifiants incorrects'}`);
+      throw new Error(`Erreur de connexion : Identifiants ou mot de passe incorrects.`);
     }
 
     const { data: profile, error: profileError } = await supabase
@@ -125,14 +139,12 @@ export async function loginRealUser(email: string, password: string): Promise<Us
       .single();
 
     if (profileError || !profile) {
-      // Fallback profile from auth metadata
-      const meta = authData.user.user_metadata || {};
       return {
         id: authData.user.id,
-        email: authData.user.email || email,
-        first_name: meta.first_name || 'Utilisateur',
-        last_name: meta.last_name || '',
-        avatar_url: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(email)}`,
+        email: userEmail,
+        first_name: firstName,
+        last_name: lastName,
+        avatar_url: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(firstName)}`,
         city: 'Lausanne',
         is_helper: false,
         rating: 5.0,
@@ -146,9 +158,10 @@ export async function loginRealUser(email: string, password: string): Promise<Us
   } else {
     if (typeof window !== 'undefined') {
       const storedUsers = JSON.parse(localStorage.getItem('sp_local_users') || '{}');
-      const userRecord = storedUsers[email];
+      const accountKey = `${firstName.toLowerCase()}_${lastName.toLowerCase()}`;
+      const userRecord = storedUsers[accountKey];
       if (!userRecord || userRecord.password !== password) {
-        throw new Error('Email ou mot de passe incorrect');
+        throw new Error('Prénom, Nom ou mot de passe incorrect');
       }
       return userRecord.profile;
     }
