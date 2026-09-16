@@ -1,9 +1,16 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "sans-pattes",
+  "main": "src/worker.ts",
   "compatibility_date": "2026-09-15",
   "assets": {
     "directory": "./out",
     "not_found_handling": "single-page-application"
-  }
+  },
+  "kv_namespaces": [
+    {
+      "binding": "SANS_PATTES_KV",
+      "id": "b6f2a09be68c41789b98aa03a4333b1d"
+    }
+  ]
 }
