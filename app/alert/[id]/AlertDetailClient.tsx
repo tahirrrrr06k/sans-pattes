@@ -17,13 +17,40 @@ import {
   XCircle,
 } from 'lucide-react';
 
-export function AlertDetailClient({ alertId }: { alertId: string }) {
+import { Alert } from '@/types';
+import { alertRepository } from '@/lib/repositories';
+
+
+export function AlertDetailClient({ alertId }: { alertId?: string }) {
   const router = useRouter();
+  const params = useParams();
+  const activeAlertId = alertId || (params?.id as string);
+
   const { alerts, currentUser, userRoleMode, acceptAlert, cancelAlert } = useApp();
 
+  const [fetchedAlert, setFetchedAlert] = useState<Alert | null>(null);
+  const [loadingAlert, setLoadingAlert] = useState<boolean>(false);
   const [raceError, setRaceError] = useState<boolean>(false);
 
-  const alert = alerts.find(a => a.id === alertId) || alerts[0];
+  const alert = alerts.find(a => a.id === activeAlertId) || fetchedAlert;
+
+  React.useEffect(() => {
+    if (!alert && activeAlertId) {
+      setLoadingAlert(true);
+      alertRepository.getAlertById(activeAlertId).then((res) => {
+        if (res) setFetchedAlert(res);
+      }).catch(err => console.warn(err)).finally(() => setLoadingAlert(false));
+    }
+  }, [alert, activeAlertId]);
+
+  if (loadingAlert) {
+    return (
+      <div className="min-h-screen bg-cream-50 p-6 flex flex-col items-center justify-center text-center">
+        <div className="animate-spin text-3xl mb-3">⏳</div>
+        <p className="text-sm font-bold text-nature-900">Chargement de l'alerte...</p>
+      </div>
+    );
+  }
 
   if (!alert) {
     return (

@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useApp } from '@/lib/store/app-context';
-import { OutcomeType } from '@/types';
+import { OutcomeType, Alert } from '@/types';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge, RewardBadge } from '@/components/ui/badge';
@@ -21,15 +21,40 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 
-export function InterventionTrackerClient({ alertId }: { alertId: string }) {
+import { alertRepository } from '@/lib/repositories';
+
+export function InterventionTrackerClient({ alertId }: { alertId?: string }) {
   const router = useRouter();
+  const params = useParams();
+  const activeAlertId = alertId || (params?.id as string);
+
   const { alerts, currentUser, updateAlertStatus, completeIntervention, cancelAlert } = useApp();
 
   const [showCompletionModal, setShowCompletionModal] = useState<boolean>(false);
   const [outcome, setOutcome] = useState<OutcomeType>('released_outside');
   const [outcomeNote, setOutcomeNote] = useState<string>('');
+  const [fetchedAlert, setFetchedAlert] = useState<Alert | null>(null);
+  const [loadingAlert, setLoadingAlert] = useState<boolean>(false);
 
-  const alert = alerts.find(a => a.id === alertId) || alerts[0];
+  const alert = alerts.find(a => a.id === activeAlertId) || fetchedAlert;
+
+  React.useEffect(() => {
+    if (!alert && activeAlertId) {
+      setLoadingAlert(true);
+      alertRepository.getAlertById(activeAlertId).then((res) => {
+        if (res) setFetchedAlert(res);
+      }).catch(err => console.warn(err)).finally(() => setLoadingAlert(false));
+    }
+  }, [alert, activeAlertId]);
+
+  if (loadingAlert) {
+    return (
+      <div className="min-h-screen bg-cream-50 p-6 flex flex-col items-center justify-center text-center">
+        <div className="animate-spin text-3xl mb-3">⏳</div>
+        <p className="text-sm font-bold text-nature-900">Chargement de l'intervention...</p>
+      </div>
+    );
+  }
 
   if (!alert) {
     return (
