@@ -20,6 +20,7 @@ import { alertRepository, isProductionBackend } from '@/lib/repositories';
 
 interface AppContextType {
   currentUser: UserProfile;
+  setCurrentUser: (profile: UserProfile) => void;
   setCurrentUserKey: (key: string) => void;
   userRoleMode: 'requester' | 'helper';
   setUserRoleMode: (mode: 'requester' | 'helper') => void;
@@ -77,11 +78,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Initialize from LocalStorage or Supabase
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const savedUserKey = localStorage.getItem('sp_user_key');
-      if (savedUserKey && DEMO_PROFILES[savedUserKey]) {
-        setCurrentUserKey(savedUserKey);
-        setCurrentUser(DEMO_PROFILES[savedUserKey]);
-        setUserRoleMode(DEMO_PROFILES[savedUserKey].is_helper ? 'helper' : 'requester');
+      const savedAuthUser = localStorage.getItem('sp_auth_user');
+      if (savedAuthUser) {
+        try {
+          const parsed = JSON.parse(savedAuthUser);
+          if (parsed && parsed.id) {
+            setCurrentUser(parsed);
+            setUserRoleMode(parsed.is_helper ? 'helper' : 'requester');
+          }
+        } catch (e) {}
+      } else {
+        const savedUserKey = localStorage.getItem('sp_user_key');
+        if (savedUserKey && DEMO_PROFILES[savedUserKey]) {
+          setCurrentUserKey(savedUserKey);
+          setCurrentUser(DEMO_PROFILES[savedUserKey]);
+          setUserRoleMode(DEMO_PROFILES[savedUserKey].is_helper ? 'helper' : 'requester');
+        }
       }
 
       const savedAlerts = localStorage.getItem('sp_alerts');
@@ -128,6 +140,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
   }, []);
+
+  const handleSetCurrentUser = (profile: UserProfile) => {
+    setCurrentUser(profile);
+    setUserRoleMode(profile.is_helper ? 'helper' : 'requester');
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sp_auth_user', JSON.stringify(profile));
+    }
+  };
 
   // Save changes to localstorage
   useEffect(() => {
@@ -393,6 +413,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <AppContext.Provider
       value={{
         currentUser,
+        setCurrentUser: handleSetCurrentUser,
         setCurrentUserKey: handleSetCurrentUserKey,
         userRoleMode,
         setUserRoleMode,

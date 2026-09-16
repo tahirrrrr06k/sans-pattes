@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { GlobalChatMessage } from '@/types';
 import { globalChatRepository } from '@/lib/repositories';
+import { useApp } from '@/lib/store/app-context';
+import { AuthModal } from '@/components/auth/auth-modal';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { 
@@ -17,26 +19,18 @@ import {
   AlertTriangle,
   MessageSquare,
   Check,
-  UserCheck
+  UserCheck,
+  LogIn
 } from 'lucide-react';
 
-const AVATAR_COLORS = [
-  { id: 'emerald', bg: 'bg-emerald-500', text: 'text-emerald-700', border: 'border-emerald-200' },
-  { id: 'sky', bg: 'bg-sky-500', text: 'text-sky-700', border: 'border-sky-200' },
-  { id: 'amber', bg: 'bg-amber-500', text: 'text-amber-700', border: 'border-amber-200' },
-  { id: 'purple', bg: 'bg-purple-500', text: 'text-purple-700', border: 'border-purple-200' },
-  { id: 'rose', bg: 'bg-rose-500', text: 'text-rose-700', border: 'border-rose-200' },
-];
-
 export function GlobalChat() {
+  const { currentUser } = useApp();
+
   const [messages, setMessages] = useState<GlobalChatMessage[]>([]);
   const [inputText, setInputText] = useState<string>('');
-  const [nickname, setNickname] = useState<string>('');
-  const [avatarColor, setAvatarColor] = useState<string>('emerald');
-  const [anonymousId, setAnonymousId] = useState<string>('');
   
   // Modals & UI States
-  const [showNicknameModal, setShowNicknameModal] = useState<boolean>(false);
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [showGuidelinesModal, setShowGuidelinesModal] = useState<boolean>(false);
   const [reportTargetMsg, setReportTargetMsg] = useState<GlobalChatMessage | null>(null);
   const [reportReason, setReportReason] = useState<string>('Contenu inapproprié');
@@ -50,29 +44,11 @@ export function GlobalChat() {
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // 1. Initialize User Anonymous Session & Nickname from LocalStorage
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      let anonId = localStorage.getItem('sp_chat_anon_id');
-      if (!anonId) {
-        anonId = 'anon_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
-        localStorage.setItem('sp_chat_anon_id', anonId);
-      }
-      setAnonymousId(anonId);
+  const displayName = currentUser 
+    ? `${currentUser.first_name} ${currentUser.last_name ? currentUser.last_name.charAt(0) + '.' : ''}`
+    : 'Utilisateur';
 
-      const savedNick = localStorage.getItem('sp_chat_nickname');
-      const savedColor = localStorage.getItem('sp_chat_avatar_color') || 'emerald';
-      
-      if (savedNick) {
-        setNickname(savedNick);
-        setAvatarColor(savedColor);
-      } else {
-        setShowNicknameModal(true);
-      }
-    }
-  }, []);
-
-  // 2. Load Messages & Subscribe to Realtime Updates
+  // 1. Load Messages & Subscribe to Realtime Updates
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
 
@@ -120,26 +96,12 @@ export function GlobalChat() {
     return () => clearInterval(timer);
   }, [cooldownSeconds]);
 
-  // Save Nickname
-  const handleSaveNickname = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanNick = nickname.trim().replace(/[^a-zA-Z0-9_\-À-ÿ ]/g, '');
-    if (!cleanNick) return;
-
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('sp_chat_nickname', cleanNick);
-      localStorage.setItem('sp_chat_avatar_color', avatarColor);
-    }
-    setNickname(cleanNick);
-    setShowNicknameModal(false);
-  };
-
   // Send Message with Rate Limiting (3s cooldown)
   const handleSendMessage = async () => {
     if (!inputText.trim() || isSending) return;
 
-    if (!nickname) {
-      setShowNicknameModal(true);
+    if (!currentUser) {
+      setShowAuthModal(true);
       return;
     }
 
@@ -154,9 +116,9 @@ export function GlobalChat() {
 
     try {
       const created = await globalChatRepository.sendMessage({
-        anonymous_user_id: anonymousId,
-        nickname: nickname,
-        avatar_color: avatarColor,
+        anonymous_user_id: currentUser.id,
+        nickname: displayName,
+        avatar_color: 'emerald',
         content: inputText.trim(),
         reply_to_id: replyToMsg?.id || null,
       });
@@ -195,7 +157,7 @@ export function GlobalChat() {
 
     await globalChatRepository.reportMessage(
       reportTargetMsg.id,
-      nickname || 'Anonyme',
+      displayName,
       reportReason
     );
 
@@ -204,34 +166,37 @@ export function GlobalChat() {
     setTimeout(() => setReportSuccessToast(null), 4000);
   };
 
-  const getColorClasses = (colorName?: string) => {
-    const matched = AVATAR_COLORS.find((c) => c.id === colorName);
-    return matched || AVATAR_COLORS[0];
-  };
-
   return (
     <div className="flex flex-col h-full">
       
-      {/* Header Info & Guidelines Link */}
+      {/* Header Info & Account Badge */}
       <div className="bg-nature-50 border border-nature-200 p-3 rounded-2xl mb-3 flex items-center justify-between text-xs">
-        <div className="flex items-center gap-2 text-nature-900 font-medium">
-          <ShieldCheck className="w-4 h-4 text-nature-600 shrink-0" />
-          <span>
-            Connecté en tant que <strong className="font-black text-nature-950">{nickname || 'Anonyme'}</strong>
-          </span>
-          <button 
-            onClick={() => setShowNicknameModal(true)}
-            className="text-[10px] text-nature-700 font-bold underline ml-1 hover:text-nature-900"
+        <div className="flex items-center gap-2.5">
+          <img
+            src={currentUser.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(currentUser.first_name)}`}
+            alt={currentUser.first_name}
+            className="w-7 h-7 rounded-full object-cover border border-nature-600 shadow-sm"
+          />
+          <div className="text-nature-900 font-medium">
+            <span>Connecté : <strong className="font-black text-nature-950">{displayName}</strong></span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAuthModal(true)}
+            className="flex items-center gap-1 font-bold text-xs text-nature-800 bg-white px-2.5 py-1 rounded-full border border-nature-300 hover:bg-nature-100 transition-colors"
           >
-            (Modifier)
+            <LogIn className="w-3.5 h-3.5" />
+            <span>Changer / Compte</span>
+          </button>
+          <button
+            onClick={() => setShowGuidelinesModal(true)}
+            className="flex items-center gap-1 font-bold text-xs text-nature-800 bg-white px-2.5 py-1 rounded-full border border-nature-300 hover:bg-nature-100 transition-colors shrink-0"
+          >
+            <span>📜 Charte</span>
           </button>
         </div>
-        <button
-          onClick={() => setShowGuidelinesModal(true)}
-          className="flex items-center gap-1 font-bold text-nature-800 bg-white px-2.5 py-1 rounded-full border border-nature-300 hover:bg-nature-100 transition-colors shrink-0"
-        >
-          <span>📜 Charte</span>
-        </button>
       </div>
 
       {/* Success Toast */}
@@ -243,7 +208,7 @@ export function GlobalChat() {
       )}
 
       {/* Messages List Container */}
-      <div className="flex-1 overflow-y-auto space-y-3 p-2 bg-white rounded-3xl border border-cream-200 min-h-[350px] max-h-[500px] mb-3">
+      <div className="flex-1 overflow-y-auto space-y-3 p-3 bg-white rounded-3xl border border-cream-200 min-h-[350px] max-h-[500px] mb-3">
         {messages.length === 0 ? (
           <div className="text-center py-16 text-warmgray-400">
             <MessageSquare className="w-10 h-10 mx-auto mb-2 opacity-40" />
@@ -252,8 +217,7 @@ export function GlobalChat() {
           </div>
         ) : (
           messages.map((msg) => {
-            const isMyMsg = msg.anonymous_user_id === anonymousId;
-            const colorObj = getColorClasses(msg.avatar_color);
+            const isMyMsg = currentUser && msg.anonymous_user_id === currentUser.id;
             const repliedTarget = msg.reply_to_id 
               ? messages.find((m) => m.id === msg.reply_to_id)
               : null;
@@ -264,9 +228,7 @@ export function GlobalChat() {
                 className={`flex gap-2.5 ${isMyMsg ? 'flex-row-reverse' : 'flex-row'} items-start group`}
               >
                 {/* Avatar */}
-                <div 
-                  className={`w-8 h-8 rounded-full ${colorObj.bg} text-white font-extrabold text-xs flex items-center justify-center shrink-0 shadow-sm uppercase`}
-                >
+                <div className="w-8 h-8 rounded-full bg-nature-700 text-white font-extrabold text-xs flex items-center justify-center shrink-0 shadow-sm uppercase">
                   {msg.nickname ? msg.nickname.charAt(0) : '?'}
                 </div>
 
@@ -384,7 +346,7 @@ export function GlobalChat() {
             placeholder={
               cooldownSeconds > 0
                 ? `Veuillez patienter ${cooldownSeconds}s...`
-                : "Partagez un message avec la communauté (500 car. max)..."
+                : `Écrivez en tant que ${displayName}...`
             }
             disabled={cooldownSeconds > 0 || isSending}
             className="flex-1 p-3.5 pl-5 pr-14 rounded-full border border-cream-300 bg-white text-xs font-semibold text-warmgray-900 focus:ring-2 focus:ring-nature-500 focus:outline-none shadow-sm disabled:bg-cream-100"
@@ -414,65 +376,11 @@ export function GlobalChat() {
         </div>
       </div>
 
-      {/* MODAL 1: NICKNAME SETUP */}
-      {showNicknameModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
-          <Card className="max-w-sm w-full p-6 bg-white rounded-3xl shadow-2xl">
-            <div className="text-center mb-5">
-              <div className="w-14 h-14 bg-nature-100 rounded-full flex items-center justify-center mx-auto mb-3 text-nature-700">
-                <UserCheck className="w-8 h-8" />
-              </div>
-              <h3 className="text-lg font-black text-nature-950">
-                Bienvenue sur le Chat Public ! 🐾
-              </h3>
-              <p className="text-xs text-warmgray-600 mt-1">
-                Choisissez un pseudonyme pour échanger anonymement avec la communauté Sans Pattes.
-              </p>
-            </div>
-
-            <form onSubmit={handleSaveNickname} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-warmgray-700 uppercase tracking-wider mb-1.5">
-                  Votre Pseudo (ex: Sophie_1003, Helper_Lausanne)
-                </label>
-                <input
-                  type="text"
-                  required
-                  maxLength={30}
-                  value={nickname}
-                  onChange={(e) => setNickname(e.target.value)}
-                  placeholder="Ex: Sophie_Lausanne"
-                  className="w-full p-3 rounded-xl border border-cream-300 text-sm font-bold text-warmgray-900 focus:ring-2 focus:ring-nature-500 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-warmgray-700 uppercase tracking-wider mb-1.5">
-                  Couleur d'avatar
-                </label>
-                <div className="flex justify-center gap-3">
-                  {AVATAR_COLORS.map((col) => (
-                    <button
-                      type="button"
-                      key={col.id}
-                      onClick={() => setAvatarColor(col.id)}
-                      className={`w-9 h-9 rounded-full ${col.bg} transition-all flex items-center justify-center ${
-                        avatarColor === col.id ? 'ring-4 ring-nature-400 scale-110' : 'opacity-70 hover:opacity-100'
-                      }`}
-                    >
-                      {avatarColor === col.id && <Check className="w-4 h-4 text-white" />}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <Button variant="primary" size="lg" fullWidth type="submit" className="mt-4">
-                Rejoindre le chat public
-              </Button>
-            </form>
-          </Card>
-        </div>
-      )}
+      {/* MODAL 1: AUTHENTICATION / ACCOUNT MODAL */}
+      <AuthModal 
+        isOpen={showAuthModal} 
+        onClose={() => setShowAuthModal(false)} 
+      />
 
       {/* MODAL 2: COMMUNITY GUIDELINES */}
       {showGuidelinesModal && (
@@ -495,21 +403,21 @@ export function GlobalChat() {
               <div className="p-3 bg-nature-50 rounded-2xl border border-nature-200">
                 <h4 className="font-extrabold text-nature-900 text-sm mb-1">1. Respect absolu des phobies 💜</h4>
                 <p>
-                  Chaque personne réagit différemment face aux arachnides et insectes. Aucun jugement, moquerie ou propos rabaissant n'est toléré sur les peurs d'autrui.
+                  Chaque personne réagit différemment face aux arachnides et insectes. Aucun jugement, moquerie ou propos rabaissant n'est toléré.
                 </p>
               </div>
 
               <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-200">
                 <h4 className="font-extrabold text-emerald-900 text-sm mb-1">2. Entraide & Capture Douce 🌿</h4>
                 <p>
-                  Sans Pattes promeut la relâche respectueuse des petites bêtes dans la nature (méthode du verre & bocal). Ne conseillez jamais d'écraser ou tuer un animal non dangereux.
+                  Sans Pattes promeut la relâche respectueuse des petites bêtes dans la nature. Ne conseillez jamais d'écraser ou tuer un animal non dangereux.
                 </p>
               </div>
 
               <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200">
                 <h4 className="font-extrabold text-amber-900 text-sm mb-1">3. Courtoisie & Sécurité 🤝</h4>
                 <p>
-                  Restez poli, respectueux et constructif. Les fausses alertes, spams, propos haineux ou démarchages commerciaux entraînent le bannissement immédiat.
+                  Restez poli, respectueux et constructif. Les spams ou propos haineux entraînent le bannissement immédiat.
                 </p>
               </div>
             </div>
