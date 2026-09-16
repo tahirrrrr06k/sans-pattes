@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { UrgencyBadge, RewardBadge, StatusBadge } from '@/components/ui/badge';
 import { InteractiveMap } from '@/components/map/interactive-map';
 import { OnboardingModal } from '@/components/onboarding/onboarding-modal';
+import { AuthModal } from '@/components/auth/auth-modal';
 import { 
   PlusCircle, 
   MapPin, 
@@ -25,6 +26,16 @@ import {
 export default function HomePage() {
   const router = useRouter();
   const { currentUser, userRoleMode, alerts, helperSettings } = useApp();
+  const [showAuthPrompt, setShowAuthPrompt] = React.useState<boolean>(false);
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedAuth = localStorage.getItem('sp_auth_user');
+      if (!savedAuth) {
+        setShowAuthPrompt(true);
+      }
+    }
+  }, []);
 
   const activeUserAlerts = alerts.filter(
     a => a.requester_id === currentUser.id && a.status !== 'completed' && a.status !== 'cancelled'
@@ -41,6 +52,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-cream-50 pb-28 px-4 pt-4">
       <OnboardingModal />
+      <AuthModal isOpen={showAuthPrompt} onClose={() => setShowAuthPrompt(false)} />
 
       <div className="max-w-md mx-auto space-y-5">
         
