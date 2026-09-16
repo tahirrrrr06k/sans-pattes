@@ -113,4 +113,23 @@ export class SupabaseAlertRepository implements IAlertRepository {
       .update({ status: 'cancelled' })
       .eq('id', alertId);
   }
+
+  subscribeToAlerts(onAlertChange: (alert: Alert) => void): () => void {
+    const channel = supabase
+      .channel('alerts_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'alerts' },
+        (payload) => {
+          if (payload.new) {
+            onAlertChange(payload.new as Alert);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }
 }

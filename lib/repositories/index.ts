@@ -28,3 +28,7 @@ export const reviewRepository: IReviewRepository = isProductionBackend
 export const profileRepository: IProfileRepository = isProductionBackend 
   ? new SupabaseProfileRepository() 
   : new MockProfileRepository();
+
+import { SupabaseGlobalChatRepository } from './supabase/supabase-global-chat-repository';
+export const globalChatRepository = new SupabaseGlobalChatRepository();
+

@@ -32,6 +32,7 @@ export interface IAlertRepository {
   updateAlertStatus(alertId: string, status: AlertStatus): Promise<void>;
   completeIntervention(alertId: string, outcome: OutcomeType, outcomeNote?: string): Promise<void>;
   cancelAlert(alertId: string): Promise<void>;
+  subscribeToAlerts?(onAlertChange: (alert: Alert) => void): () => void;
 }
 
 export interface IMessageRepository {

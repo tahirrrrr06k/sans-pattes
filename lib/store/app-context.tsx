@@ -15,6 +15,8 @@ import {
   WeeklySchedule
 } from '@/types';
 import { DEMO_PROFILES, DEFAULT_HELPER_SETTINGS, INITIAL_ALERTS, INITIAL_MESSAGES, INITIAL_REVIEWS } from '@/lib/mock/initial-data';
+import { alertRepository, isProductionBackend } from '@/lib/repositories';
+
 
 interface AppContextType {
   currentUser: UserProfile;
@@ -39,7 +41,7 @@ interface AppContextType {
     approximate_location: string;
     latitude: number;
     longitude: number;
-  }) => Alert;
+  }) => Promise<Alert> | Alert;
 
   acceptAlert: (alertId: string) => boolean;
   updateAlertStatus: (alertId: string, status: AlertStatus) => void;
@@ -72,7 +74,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     DEFAULT_HELPER_SETTINGS['22222222-2222-4222-a222-222222222222']
   );
 
-  // Initialize from LocalStorage if available
+  // Initialize from LocalStorage or Supabase
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedUserKey = localStorage.getItem('sp_user_key');
@@ -100,6 +102,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const savedOnboarding = localStorage.getItem('sp_onboarding_done');
       if (savedOnboarding !== null) {
         setOnboardingCompleted(savedOnboarding === 'true');
+      }
+    }
+
+    if (isProductionBackend) {
+      alertRepository.getAlerts().then(remoteAlerts => {
+        if (remoteAlerts && remoteAlerts.length > 0) {
+          setAlerts(remoteAlerts);
+        }
+      }).catch(err => console.warn('Failed to load remote alerts:', err));
+
+      if (alertRepository.subscribeToAlerts) {
+        const unsub = alertRepository.subscribeToAlerts((incomingAlert) => {
+          setAlerts(prev => {
+            const idx = prev.findIndex(a => a.id === incomingAlert.id);
+            if (idx >= 0) {
+              const updated = [...prev];
+              updated[idx] = { ...updated[idx], ...incomingAlert };
+              return updated;
+            }
+            return [incomingAlert, ...prev];
+          });
+        });
+        return () => unsub();
       }
     }
   }, []);
@@ -143,7 +168,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Create new Alert
-  const createAlert = (data: {
+  const createAlert = async (data: {
     category: CategoryType;
     description: string;
     room: RoomType;
@@ -154,28 +179,56 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     approximate_location: string;
     latitude: number;
     longitude: number;
-  }): Alert => {
-    const newAlert: Alert = {
-      id: 'alert_' + Date.now(),
-      requester_id: currentUser.id,
-      requester: currentUser,
-      category: data.category,
-      description: data.description,
-      room: data.room,
-      photo_url: data.photo_url || null,
-      urgency: data.urgency,
-      reward_amount: data.reward_amount,
-      currency: 'CHF',
-      status: 'searching',
-      approximate_location: data.approximate_location,
-      exact_address: data.exact_address,
-      latitude: data.latitude,
-      longitude: data.longitude,
-      created_at: new Date().toISOString(),
-    };
+  }): Promise<Alert> => {
+    let created: Alert;
+    if (isProductionBackend) {
+      try {
+        created = await alertRepository.createAlert(data, currentUser.id);
+        created = { ...created, requester: currentUser };
+      } catch (err) {
+        console.warn('Backend alert creation failed, using fallback:', err);
+        created = {
+          id: 'alert_' + Date.now(),
+          requester_id: currentUser.id,
+          requester: currentUser,
+          category: data.category,
+          description: data.description,
+          room: data.room,
+          photo_url: data.photo_url || null,
+          urgency: data.urgency,
+          reward_amount: data.reward_amount,
+          currency: 'CHF',
+          status: 'searching',
+          approximate_location: data.approximate_location,
+          exact_address: data.exact_address,
+          latitude: data.latitude,
+          longitude: data.longitude,
+          created_at: new Date().toISOString(),
+        };
+      }
+    } else {
+      created = {
+        id: 'alert_' + Date.now(),
+        requester_id: currentUser.id,
+        requester: currentUser,
+        category: data.category,
+        description: data.description,
+        room: data.room,
+        photo_url: data.photo_url || null,
+        urgency: data.urgency,
+        reward_amount: data.reward_amount,
+        currency: 'CHF',
+        status: 'searching',
+        approximate_location: data.approximate_location,
+        exact_address: data.exact_address,
+        latitude: data.latitude,
+        longitude: data.longitude,
+        created_at: new Date().toISOString(),
+      };
+    }
 
-    setAlerts(prev => [newAlert, ...prev]);
-    return newAlert;
+    setAlerts(prev => [created, ...prev.filter(a => a.id !== created.id)]);
+    return created;
   };
 
   // Atomic Accept Alert (prevents race conditions)

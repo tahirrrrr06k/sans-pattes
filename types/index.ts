@@ -138,3 +138,24 @@ export interface Report {
   status: 'pending' | 'resolved' | 'dismissed';
   created_at: string;
 }
+
+export interface GlobalChatMessage {
+  id: string;
+  anonymous_user_id: string;
+  nickname: string;
+  avatar_color?: string;
+  content: string;
+  reply_to_id?: string | null;
+  reply_to?: GlobalChatMessage | null;
+  is_deleted: boolean;
+  created_at: string;
+}
+
+export interface GlobalChatReport {
+  id: string;
+  message_id: string;
+  reporter_nickname: string;
+  reason: string;
+  created_at: string;
+}
+

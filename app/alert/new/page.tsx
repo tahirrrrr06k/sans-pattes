@@ -19,11 +19,16 @@ import {
   AlertCircle
 } from 'lucide-react';
 
+import { uploadAlertPhoto } from '@/lib/supabase/storage';
+
 export default function NewAlertPage() {
   const router = useRouter();
   const { createAlert } = useApp();
 
   const [step, setStep] = useState<number>(1);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState<boolean>(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Form State
   const [category, setCategory] = useState<CategoryType>('Araignée');
@@ -67,25 +72,45 @@ export default function NewAlertPage() {
     else router.push('/');
   };
 
-  const handleSubmit = () => {
-    const finalReward = isCustomReward ? (parseInt(customReward) || 0) : rewardAmount;
-    const alert = createAlert({
-      category,
-      description,
-      room,
-      photo_url: photoUrl,
-      urgency,
-      reward_amount: finalReward,
-      exact_address: exactAddress,
-      approximate_location: approxLocation,
-      latitude: 46.5197,
-      longitude: 6.6323,
-    });
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      const finalReward = isCustomReward ? (parseInt(customReward) || 0) : rewardAmount;
+      const alert = await createAlert({
+        category,
+        description,
+        room,
+        photo_url: photoUrl,
+        urgency,
+        reward_amount: finalReward,
+        exact_address: exactAddress,
+        approximate_location: approxLocation,
+        latitude: 46.5197,
+        longitude: 6.6323,
+      });
 
-    router.push(`/alert/${alert.id}`);
+      router.push(`/alert/${alert.id}`);
+    } catch (error) {
+      console.error('Error creating alert:', error);
+      setIsSubmitting(false);
+    }
   };
 
-  // Mock Photo Upload / Camera simulation
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingPhoto(true);
+    try {
+      const url = await uploadAlertPhoto(file);
+      setPhotoUrl(url);
+    } catch (err) {
+      console.error('Failed to upload photo:', err);
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
   const handleSimulatePhoto = () => {
     const samplePhotos = [
       'https://images.unsplash.com/photo-1577741314755-048d8525d31e?w=600',
@@ -167,7 +192,20 @@ export default function NewAlertPage() {
               Facultatif mais très utile pour que le helper prépare le bon bocal ou verre !
             </p>
 
-            {photoUrl ? (
+            <input
+              type="file"
+              accept="image/*"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              className="hidden"
+            />
+
+            {isUploadingPhoto ? (
+              <Card className="p-8 mb-6 text-center bg-white">
+                <div className="animate-spin text-3xl mb-2">⏳</div>
+                <p className="text-sm font-bold text-nature-900">Envoi de la photo en cours...</p>
+              </Card>
+            ) : photoUrl ? (
               <Card className="p-3 mb-6 text-center">
                 <img 
                   src={photoUrl} 
@@ -184,20 +222,19 @@ export default function NewAlertPage() {
             ) : (
               <div className="grid grid-cols-1 gap-4 mb-6">
                 <button
-                  onClick={handleSimulatePhoto}
+                  onClick={() => fileInputRef.current?.click()}
                   className="p-6 rounded-3xl border-2 border-dashed border-nature-400 bg-nature-50/50 hover:bg-nature-100/50 flex flex-col items-center justify-center text-nature-900 gap-2 transition-colors"
                 >
                   <Camera className="w-10 h-10 text-nature-600" />
-                  <span className="font-extrabold text-sm">Prendre une photo</span>
-                  <span className="text-xs text-warmgray-500">(Utilise la caméra de votre appareil)</span>
+                  <span className="font-extrabold text-sm">Prendre / Choisir une photo</span>
+                  <span className="text-xs text-warmgray-500">(Caméra ou galeries de votre appareil)</span>
                 </button>
 
                 <button
                   onClick={handleSimulatePhoto}
-                  className="p-4 rounded-2xl border border-cream-300 bg-white hover:bg-cream-100 flex items-center justify-center gap-2 text-warmgray-700 font-bold text-sm"
+                  className="p-3 rounded-2xl border border-cream-300 bg-white hover:bg-cream-100 flex items-center justify-center gap-2 text-warmgray-600 font-medium text-xs"
                 >
-                  <Upload className="w-4 h-4" />
-                  <span>Importer depuis la galerie</span>
+                  <span>Ou utiliser une photo démo de test 🕷️</span>
                 </button>
               </div>
             )}
@@ -483,10 +520,20 @@ export default function NewAlertPage() {
               size="xl" 
               fullWidth 
               onClick={handleSubmit}
+              disabled={isSubmitting}
               className="gap-2 shadow-xl hover:scale-[1.01]"
             >
-              <span>Envoyer l'alerte maintenant</span>
-              <Sparkles className="w-5 h-5" />
+              {isSubmitting ? (
+                <>
+                  <span className="animate-spin text-lg">⏳</span>
+                  <span>Publication en cours...</span>
+                </>
+              ) : (
+                <>
+                  <span>Envoyer l'alerte maintenant</span>
+                  <Sparkles className="w-5 h-5" />
+                </>
+              )}
             </Button>
           </div>
         )}
